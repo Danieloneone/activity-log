@@ -3,7 +3,7 @@ name: CI Dev Deployment
 
 on:
   push:
-    branches: [ master ]  # dispara cuando hagas push a master
+    branches: [ master ]
 
 permissions:
   contents: write
