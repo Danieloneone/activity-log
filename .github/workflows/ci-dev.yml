@@ -19,10 +19,15 @@ jobs:
       - name: Install zip
         run: sudo apt-get update && sudo apt-get install -y zip
 
+      - name: Install Bun
+        run: curl -fsSL https://bun.sh/install | bash
+
       - name: Build
         run: |
-          npm install
-          npm run build
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          bun i
+          ncc build src/index.js --license licenses.txt
           zip -r build.zip .
 
       - name: Upload Artifact
