@@ -1,0 +1,98 @@
+.github/workflows/ci-dev.yml
+name: CI Dev Deployment
+
+on:
+  push:
+    branches: [ master ]  # dispara cuando hagas push a master
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (opcional para proyectos Node)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install & Build (soporta Node y Python básicos)
+        run: |
+          # Node.js
+          if [ -f package.json ]; then
+            npm ci || npm install
+            if npm run | grep -q ' build'; then
+              npm run build || true
+            fi
+          fi
+
+          # Python (opcional)
+          if [ -f requirements.txt ] || [ -f setup.py ]; then
+            python3 -m pip install --upgrade pip
+            if [ -f requirements.txt ]; then
+              pip install -r requirements.txt || true
+            fi
+            if [ -f setup.py ]; then
+              python3 setup.py install || true
+            fi
+          fi
+
+          # Crear zip del build (prioriza build/ o dist/; sino todo el repo sin .git)
+          if [ -d build ]; then
+            zip -r build.zip build
+          elif [ -d dist ]; then
+            zip -r build.zip dist
+          else
+            zip -r build.zip . -x ".git/*"
+          fi
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: build.zip
+
+  deploy-dev:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/install.sh | sudo bash
+
+      - name: Create or update dev release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ vars.BUILD_TAG }}
+          NOTE: ${{ vars.RELEASE_NOTE }}
+        run: |
+          # si no hay TAG definido, usamos número de run
+          if [ -z "$TAG" ]; then
+            TAG="dev-${GITHUB_RUN_NUMBER}"
+          fi
+          if [ -z "$NOTE" ]; then
+            NOTE="Release automática para dev (run $GITHUB_RUN_ID, commit $GITHUB_SHA)"
+          fi
+
+          # Autenticar gh con el token del runner
+          echo "$GITHUB_TOKEN" | gh auth login --with-token
+
+          # Intentar crear la release; si ya existe, subir asset y actualizar notas
+          if gh release create "$TAG" build.zip --title "dev release $TAG" --notes "$NOTE"; then
+            echo "Release creada: $TAG"
+          else
+            echo "La release ya existe. Subiendo asset y actualizando notas..."
+            gh release upload "$TAG" build.zip --clobber
+            gh release edit "$TAG" --notes "$NOTE"
+          fi
