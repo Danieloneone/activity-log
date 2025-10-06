@@ -26,8 +26,9 @@ jobs:
         run: |
           export BUN_INSTALL="$HOME/.bun"
           export PATH="$BUN_INSTALL/bin:$PATH"
-          bun i
-          ncc build src/index.js --license licenses.txt
+          bun install
+          bun add -d @vercel/ncc
+          npx ncc build src/index.js --license licenses.txt
           zip -r build.zip .
 
       - name: Upload Artifact
